@@ -14,7 +14,33 @@ Install this skill and Claude starts thinking in parallel by default. It figures
 
 A 9-step feature build becomes 4 waves of concurrent work. Same result, fraction of the wall-clock time.
 
-Here's what happens when you install this skill:
+## Divide. Then Conquer.
+
+The name isn't just clever — it's literally what happens in two acts.
+
+### The Divide
+
+You hand Claude a big job. Before touching any code, it splits that job apart.
+
+Not randomly — it looks at every piece and asks: *"Does this piece actually need to wait for anything else, or can it start right now?"*
+
+Most of the time, the answer is surprising. Building the frontend doesn't need the backend to exist yet — it just needs to agree on what the data looks like. Writing tests doesn't need the code to exist yet — you can write the test first and fill in the code after. Research tasks *never* need to wait for each other.
+
+So Claude maps out which pieces depend on which, and groups the independent ones together into **waves** — batches of work that can all happen at the same time.
+
+Think of it like planning a house build. You don't wait for the electrician to finish before calling the plumber. They work different rooms at the same time. The only thing you *actually* wait for is the foundation — everything else can overlap.
+
+### The Conquer
+
+Now Claude attacks each wave all at once. It spins up multiple workers (subagents), hands each one a clear job description, and lets them run simultaneously.
+
+Wave 1 finishes. Everything that was waiting on Wave 1 can now go — Wave 2 launches, again all at once. And so on until everything's done.
+
+Then it pulls all the results together, checks that nothing conflicts, runs the tests, and reviews the code. One clean delivery.
+
+**The divide is the thinking. The conquer is the doing. Both happen automatically — you just describe what you want.**
+
+Here's what that looks like step by step:
 
 1. **You describe what you want** — "Build me X" or "Fix this bug" or "Refactor these files"
 2. **Claude breaks your request into small pieces** — What can be researched? What can be coded independently? What depends on what?
