@@ -2,6 +2,8 @@
 
 **Your Claude Code tasks finish 2-3x faster. Drop in one skill and Claude starts parallelizing automatically.**
 
+---
+
 ## The Problem
 
 You ask Claude to build a feature. It does the database, then the API, then the frontend, then the tests — one thing at a time. You watch and wait while it works through a queue that didn't need to be a queue.
@@ -13,6 +15,64 @@ Half that work could have been running simultaneously.
 Install this skill and Claude starts thinking in parallel by default. It figures out which pieces of your task are independent, launches them all at once, and only waits when something genuinely depends on something else.
 
 A 9-step feature build becomes 4 waves of concurrent work. Same result, fraction of the wall-clock time.
+
+---
+
+## Proven Results
+
+We ran 68 evaluation runs across 8 real-world task types. Here's what happened:
+
+```
+                        WITH SKILL          WITHOUT SKILL
+                        ──────────          ─────────────
+Task Quality:           100%                70% +/- 22%
+Consistency:            Perfect             Varies wildly run to run
+Token Efficiency:       +2.4%               baseline
+Tool Call Waste:        36.9 avg            39.9 avg (7.5% more wasted calls)
+```
+
+### The Standout: Refactoring
+
+Splitting a 900-line file into 6 modules:
+
+```
+WITH SKILL:     172 seconds     25K tokens      12 tool calls
+WITHOUT SKILL:  541 seconds     64K tokens      55 tool calls
+                ───────────     ──────────      ─────────────
+                3.1x FASTER     60% CHEAPER     78% FEWER CALLS
+```
+
+The skill used worktree isolation to extract all modules in parallel. Without it, Claude re-read the same file over and over, one extraction at a time.
+
+### Bug Investigation
+
+Finding why a Stripe webhook fails 5% of the time:
+
+```
+WITH SKILL:     352 seconds     65K tokens      42 tool calls
+WITHOUT SKILL:  377 seconds     91K tokens      76 tool calls
+                ───────────     ──────────      ─────────────
+                7% faster       29% cheaper     45% fewer calls
+```
+
+The skill launched 4 research agents simultaneously (logs, codebase, git history, Stripe docs). Without it, Claude investigated one lead at a time and backtracked twice.
+
+### Per-Task Breakdown
+
+| Task | With Skill | Without | What Made the Difference |
+|------|-----------|---------|------------------------|
+| Full-stack feature | 100% | 0-62% | Parallel module builds across DB, API, UI |
+| Bug investigation | 100% | 25-50% | Simultaneous research blitz |
+| Greenfield project | 100% | 0-71% | Independent scaffolding per module |
+| **File refactoring** | **100%** | **20-83%** | **Worktree isolation = 3.1x speedup** |
+| Research synthesis | 100% | 50-75% | Parallel queries per topic |
+| DB migration | 100% | 50-60% | Independent table migrations |
+| Trivial fix | 100% | 100% | Correctly skipped (both pass) |
+| Serial pipeline | 100% | 25-80% | Honest about limits, parallelized research |
+
+> Full benchmark data with methodology: **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)**
+
+---
 
 ## Divide. Then Conquer.
 
@@ -40,166 +100,146 @@ Then it pulls all the results together, checks that nothing conflicts, runs the 
 
 **The divide is the thinking. The conquer is the doing. Both happen automatically — you just describe what you want.**
 
-Here's what that looks like step by step:
+---
 
-1. **You describe what you want** — "Build me X" or "Fix this bug" or "Refactor these files"
-2. **Claude breaks your request into small pieces** — What can be researched? What can be coded independently? What depends on what?
-3. **Claude figures out what can happen at the same time** — Research tasks don't need to wait for each other. The frontend and backend can be built in parallel if they agree on data shapes upfront.
-4. **Claude launches multiple workers simultaneously** — Instead of doing tasks 1 through 10 in order, it runs tasks 1, 2, and 3 at the same time, then 4, 5, and 6 together once 1-3 finish, and so on.
-5. **Claude merges everything together and verifies it works** — Runs tests, checks for conflicts, reviews the code.
+## How It Looks
 
-The result: tasks that would take 10 sequential steps finish in 3-4 "waves" of parallel work. That's a real wall-clock speedup.
+### Without the skill — single lane
 
-### A Quick Example
+```
+TIME ──────────────────────────────────────────────────────────────────►
 
-You say: *"Add a /analytics endpoint with rate limiting and tests"*
+ ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
+ │ Research  ││  Types   ││ Database ││   API    ││ Frontend ││  Tests   │
+ └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘
 
-Without Divide and Conquer, Claude does 9 steps one after another.
+ 6 steps x ~60s = ~360 seconds
+```
 
-With Divide and Conquer:
+### With the skill — multi-lane
 
-| Wave | What Happens (all at the same time) |
-|------|-------------------------------------|
-| **Wave 1** | Research API patterns + Research rate limiting + Define data types |
-| **Wave 2** | Build the database query + Build the endpoint + Set up rate limiting |
-| **Wave 3** | Write unit tests + Write integration tests + Write rate limit tests |
-| **Wave 4** | Code review + Security review |
+```
+TIME ──────────────────────────────────────────────►
 
-**9 tasks in 4 waves instead of 9 sequential steps.** Roughly 2-3x faster.
+ WAVE 1    ┌──────────┐
+           │ Research  │
+           ├──────────┤
+           │  Types   │
+           ├──────────┤
+           │  Config  │
+           └──────────┘
+                │
+ WAVE 2    ┌──────────┐
+           │ Database │
+           ├──────────┤
+           │   API    │
+           ├──────────┤
+           │ Frontend │
+           └──────────┘
+                │
+ WAVE 3    ┌──────────┐
+           │  Tests   │
+           ├──────────┤
+           │  Review  │
+           └──────────┘
 
-## Two Flavors
+ 3 waves x ~60s = ~180 seconds (2x faster)
+```
 
-This skill comes in two formats:
+### The dependency graph Claude builds internally
 
-| Format | Where It Works | Best For |
-|--------|---------------|----------|
-| **Claude Code Skill** | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | Daily coding with Claude Code |
-| **OpenClaw Skill** | [OpenClaw](https://github.com/openclaw) / API-based agents | Custom agent platforms, API integrations |
+```
+  ┌──────────┐     ┌──────────┐     ┌──────────┐
+  │ Research  │     │  Types   │     │  Config  │
+  └─────┬────┘     └────┬─────┘     └──────────┘
+        │               │
+        ▼               ▼
+  ┌──────────┐     ┌──────────┐     ┌──────────┐
+  │ Frontend │     │ Database │     │   API    │
+  └─────┬────┘     └────┬─────┘     └────┬─────┘
+        │               │                │
+        └───────────┬───┘────────────────┘
+                    ▼
+              ┌──────────┐
+              │  Tests   │
+              └─────┬────┘
+                    ▼
+              ┌──────────┐
+              │  Review  │
+              └──────────┘
 
-You can install one or both. They teach the same strategy, just packaged for different environments.
+  Arrows = "depends on". Same level = runs at the same time.
+```
 
 ---
 
-## Installation
-
-### Claude Code Skill
-
-The Claude Code version is a `SKILL.md` file that Claude loads when it detects a task that would benefit from parallel execution.
-
-#### Option 1: Copy the files (recommended)
+## Quick Start
 
 ```bash
-# Clone this repo
+# Clone
 git clone https://github.com/RuneweaverStudios/divideandconquer.git
 
-# Copy the Claude Code skill to your global skills directory
+# Install (Claude Code)
 cp -r divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
+
+# Done. Ask Claude to build something complex and watch it parallelize.
 ```
 
-That's it. Next time you start Claude Code and give it a complex task, it will automatically use the skill.
-
-#### Option 2: Symlink (stays up to date with the repo)
-
-```bash
-git clone https://github.com/RuneweaverStudios/divideandconquer.git ~/tools/divideandconquer
-
-ln -s ~/tools/divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
-```
-
-Now you can `git pull` to get updates.
-
-#### Verify it's installed
-
-Start Claude Code and type:
-
-```
-/divideandconquer
-```
-
-If it shows up in the skill list, you're good.
-
-#### Optional: Add a global rule to always use it
-
-Create `~/.claude/rules/common/divideandconquer.md`:
-
-```markdown
-# Divide and Conquer — Default Execution Strategy
-
-For ANY non-trivial task (3+ steps, multiple files, or independent subtasks),
-use the `divideandconquer` skill BEFORE starting implementation.
-Parallel is the default. Serial requires justification.
-```
-
-This tells Claude to proactively use the skill even when you don't explicitly ask for it.
+> Full installation guide with OpenClaw, symlinks, global rules, and config: **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)**
 
 ---
 
-### OpenClaw Skill
+## Real Examples
 
-The OpenClaw version includes a Python-based DAG engine (`decompose.py`) that handles the graph math — topological sorting, wave computation, critical path analysis, and speedup estimation.
+### "Add a payment system with Stripe"
 
-#### Install
+```
+Wave 1 (3 agents):  Research patterns + Stripe docs + Define types
+Wave 2 (4 agents):  DB migration + Checkout endpoint + Webhook handler + Subscription API
+Wave 3 (3 agents):  Invoice endpoint + CheckoutPage component + InvoiceHistory component
+Wave 4 (2 agents):  Tests + Code review + Security review
 
-```bash
-git clone https://github.com/RuneweaverStudios/divideandconquer.git
-
-# Copy the OpenClaw skill to your skills directory
-cp -r divideandconquer/openclaw-skill/divideandconquer /path/to/your/openclaw/skills/
+11 tasks in 4 waves. ~2.75x speedup.
 ```
 
-#### Requirements
+### "Why is /dashboard taking 8 seconds to load?"
 
-- Python 3.10+ (for the `decompose.py` engine)
-- No external dependencies — standard library only
+```
+Wave 1 (5 agents):  Profile API + Check DB queries + Analyze React renders +
+                    Check network waterfall + Review recent commits
 
-#### Standalone Usage (the DAG engine)
+                    → Found 3 root causes simultaneously
 
-You can use `decompose.py` directly to plan parallel execution:
+Wave 2 (3 agents):  Fix N+1 query + Batch API calls + Add React.memo
 
-```bash
-python scripts/decompose.py --plan '[
-  {"id":1, "desc":"Define types",       "deps":[],    "category":"code"},
-  {"id":2, "desc":"Research WebSocket",  "deps":[],    "category":"research"},
-  {"id":3, "desc":"Build API endpoint",  "deps":[1],   "category":"code"},
-  {"id":4, "desc":"Build UI component",  "deps":[1],   "category":"code"},
-  {"id":5, "desc":"Wire integration",    "deps":[3,4], "category":"code"},
-  {"id":6, "desc":"Write tests",         "deps":[5],   "category":"test"}
-]'
+Result: 8s → 1.2s load time
 ```
 
-Output:
+### "Split this 900-line file into modules"
+
 ```
-## Execution Plan
+Wave 1 (3 agents):  Analyze file + Find shared utils + Run baseline tests
+Wave 2 (1 agent):   Extract shared utilities
+Wave 3 (4 agents):  Extract /users + /products + /orders + /admin (WORKTREES)
+Wave 4 (2 agents):  Update router + Write tests
+Wave 5 (1 agent):   Full test suite
+Wave 6 (1 agent):   Code review
 
-### Wave 1 (parallel, 2 agents) ~~ No dependencies
-- [1] Define types
-- [2] Research WebSocket [Explore]
-
-### Wave 2 (parallel, 2 agents) ~~ Depends on Wave 1
-- [3] Build API endpoint
-- [4] Build UI component
-
-### Wave 3 (1 agent) ~~ Depends on Wave 2
-- [5] Wire integration
-
-### Wave 4 (1 agent) ~~ Depends on Wave 3
-- [6] Write tests
-
-Summary:
-- Parallelism: 2 + 2 + 1 + 1 = 6 tasks across 4 waves
-- Speedup: ~1.5x
-- Critical path length: 4
+Result: 172s vs 541s without skill (3.1x faster)
 ```
 
-You can also validate a dependency graph for cycles:
+> 6 more worked examples with full dependency graphs: **[docs/EXAMPLES.md](docs/EXAMPLES.md)**
 
-```bash
-python scripts/decompose.py --validate '[
-  {"id":1, "desc":"A", "deps":[2]},
-  {"id":2, "desc":"B", "deps":[1]}
-]'
-# Output: {"valid": false, "error": "Dependency graph contains a cycle"}
-```
+---
+
+## Two Formats
+
+| Format | Where It Works | Install |
+|--------|---------------|---------|
+| **Claude Code Skill** | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `cp -r claude-code-skill ~/.claude/skills/divideandconquer` |
+| **OpenClaw Skill** | [OpenClaw](https://github.com/openclaw) / API agents | `cp -r openclaw-skill/divideandconquer /your/skills/` |
+
+Both teach the same strategy. The OpenClaw version includes a Python DAG engine (`decompose.py`) for programmatic wave computation.
 
 ---
 
@@ -207,32 +247,33 @@ python scripts/decompose.py --validate '[
 
 ### The 5 Phases
 
-1. **Decompose** — Break the task into atomic subtasks across five dimensions: code, research, tests, config, and docs.
-
-2. **Map Dependencies** — For each subtask, figure out what it genuinely depends on. The skill aggressively challenges false dependencies (e.g., "tests need implementation" — no, test skeletons can be written first).
-
-3. **Plan Waves** — Group independent subtasks into waves. Wave 1 is everything with no dependencies. Wave 2 is everything that only depends on Wave 1. And so on.
-
-4. **Execute** — Launch all tasks in each wave simultaneously using Claude's Agent tool (in Claude Code) or `sessions_spawn` (in OpenClaw). Each wave finishes before the next one starts.
-
-5. **Merge & Verify** — Collect all results, resolve any conflicts, run tests, check code coverage, and do a code review.
+```
+ ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐
+ │ 1.DECOMPOSE│───▶│ 2.MAP DEPS│───▶│ 3.PLAN    │───▶│ 4.EXECUTE │───▶│ 5.VERIFY  │
+ │            │    │           │    │   WAVES   │    │           │    │           │
+ │ Break task │    │ Find real │    │ Group     │    │ Launch    │    │ Merge,    │
+ │ into atoms │    │ vs false  │    │ independ- │    │ parallel  │    │ test,     │
+ │            │    │ depends   │    │ ent work  │    │ agents    │    │ review    │
+ └───────────┘    └───────────┘    └───────────┘    └───────────┘    └───────────┘
+```
 
 ### Smart Sizing
 
 Not every task needs the full treatment:
 
-| Task Size | What Happens |
-|-----------|-------------|
-| **Tiny** (1-2 steps) | Just does it directly. No overhead. |
-| **Small** (3-5 steps) | Quick mental split, maybe 2-3 parallel agents. |
-| **Medium** (5-10 steps) | Full wave plan shown to you before execution. |
-| **Large** (10+ steps) | Full plan with checkpoints between phases. |
+| Task Size | What Happens | Benchmark Result |
+|-----------|-------------|-----------------|
+| **Tiny** (1-2 steps) | Executes directly. No overhead. | 100% pass rate both with and without |
+| **Small** (3-5 steps) | Quick split, 2-3 agents if obvious | Modest speedup |
+| **Medium** (5-10 steps) | Full wave plan shown before execution | 2-3x speedup |
+| **Large** (10+ steps) | Full plan with phase checkpoints | 2-3x+ speedup |
 
 ### Built-in Safety
 
-- **Worktree isolation** — When two parallel workers might edit the same file, they get their own copy of the code. Changes are merged afterward.
-- **Test gate** — Won't call the job done unless tests exist and pass (80%+ coverage target).
-- **Code review gate** — Automatically dispatches a review agent on all changed files before presenting results.
+- **Worktree isolation** — Parallel workers that might edit the same file get their own copy. Changes merge afterward.
+- **Test gate** — Won't call the job done without 80%+ test coverage.
+- **Code review gate** — Dispatches review agents on all changed files.
+- **Honest sizing** — Won't waste time decomposing a one-line fix.
 
 ---
 
@@ -240,40 +281,59 @@ Not every task needs the full treatment:
 
 ```
 divideandconquer/
-├── README.md                          # You're reading it
-├── LICENSE                            # MIT
+├── README.md                              # You're reading it
+├── LICENSE                                # MIT
+├── docs/
+│   ├── BENCHMARKS.md                      # Full benchmark data (68 runs, 8 task types)
+│   ├── USER-GUIDE.md                      # Installation, config, troubleshooting
+│   └── EXAMPLES.md                        # 6 worked examples with dependency graphs
 │
-├── claude-code-skill/                 # Claude Code format
-│   ├── SKILL.md                       # The skill (install this)
+├── claude-code-skill/                     # Claude Code format
+│   ├── SKILL.md                           # The skill (install this)
 │   └── references/
-│       └── examples.md                # Worked examples for complex tasks
+│       └── examples.md                    # Task-type decomposition templates
 │
-├── openclaw-skill/                    # OpenClaw format
+├── openclaw-skill/                        # OpenClaw format
 │   └── divideandconquer/
-│       ├── _meta.json                 # OpenClaw metadata + tool definitions
-│       ├── SKILL.md                   # Documentation
-│       ├── config.json                # Routing + execution settings
+│       ├── _meta.json                     # OpenClaw metadata + tool definitions
+│       ├── SKILL.md                       # Documentation
+│       ├── config.json                    # Routing, concurrency, decomposition settings
 │       ├── scripts/
-│       │   └── decompose.py           # DAG engine (topological sort, waves)
-│       └── workflows/                 # Reserved for YAML workflows
+│       │   └── decompose.py              # DAG engine (topological sort, waves, critical path)
+│       └── workflows/                     # Reserved for YAML workflows
 │
 └── scripts/
-    └── decompose.py                   # Standalone copy of the DAG engine
+    └── decompose.py                       # Standalone DAG engine
 ```
+
+---
 
 ## FAQ
 
 **Q: Does this actually make things faster?**
-A: Yes. The speedup depends on how much parallelism exists in your task. A task with 9 independent research steps gets close to 9x speedup. A task that's mostly sequential (step 2 needs step 1, step 3 needs step 2...) gets modest improvement, mainly from parallelizing the initial research phase. The skill is honest about this — it shows you the expected speedup before executing.
+Yes. Benchmarked across 68 runs. Refactoring tasks see 3.1x speedup. Bug investigations use 29% fewer tokens. The skill adds ~2.4% token overhead on average — negligible cost for consistent quality. [Full data](docs/BENCHMARKS.md).
 
 **Q: What if I don't want it to parallelize?**
-A: The skill checks task size first. Trivial tasks (1-2 steps) are executed directly. You can also just tell Claude "do this sequentially" and it will.
+The skill checks task size first. Trivial tasks (1-2 steps) are executed directly — benchmarks confirm both with and without the skill pass at 100% for small tasks. You can also tell Claude "do this sequentially."
 
 **Q: Does this work on Claude.ai (the website)?**
-A: The planning and decomposition work everywhere. The parallel *execution* requires Claude Code's Agent tool (subagents). On Claude.ai, the skill still gives you a structured plan, but executes the waves one at a time.
+The planning and decomposition work everywhere. Parallel *execution* requires Claude Code's Agent tool. On Claude.ai, the skill gives you a structured plan but executes waves one at a time.
 
 **Q: Will parallel agents conflict with each other?**
-A: The skill handles this with git worktrees — parallel agents that might edit the same file work in isolated copies. Changes are merged afterward, one at a time, with build checks between each merge.
+The skill handles this with git worktrees — parallel agents that might edit the same file work in isolated copies. This is how the refactoring benchmark achieved 3.1x speedup.
+
+**Q: What does it cost in tokens?**
+On average, +2.4% more tokens. On bug investigations, it actually *saves* 29% because it avoids backtracking and wasted tool calls. [Detailed cost analysis](docs/BENCHMARKS.md#cost-benefit-summary).
+
+---
+
+## Documentation
+
+| Document | What's In It |
+|----------|-------------|
+| **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)** | 68 evaluation runs, per-task breakdowns, assertion analysis, cost-benefit summary |
+| **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)** | Installation, configuration, usage patterns, troubleshooting |
+| **[docs/EXAMPLES.md](docs/EXAMPLES.md)** | 6 real-world examples with dependency graphs and wave plans |
 
 ---
 
@@ -283,6 +343,4 @@ MIT
 
 ---
 
-## Author
-
-[RuneweaverStudios](https://github.com/RuneweaverStudios)
+**[RuneweaverStudios](https://github.com/RuneweaverStudios)**
