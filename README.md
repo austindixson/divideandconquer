@@ -177,7 +177,7 @@ TIME ─────────────────────────
 
 ```bash
 # Clone
-git clone https://github.com/RuneweaverStudios/divideandconquer.git
+git clone https://github.com/austindixson/divideandconquer.git
 
 # Install (Claude Code)
 cp -r divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
@@ -343,4 +343,4 @@ MIT
 
 ---
 
-**[RuneweaverStudios](https://github.com/RuneweaverStudios)**
+**[austindixson](https://github.com/austindixson)**
