@@ -22,7 +22,7 @@ Everything you need to get started, from installation to advanced usage.
 
 ```bash
 # 1. Clone
-git clone https://github.com/RuneweaverStudios/divideandconquer.git
+git clone https://github.com/austindixson/divideandconquer.git
 
 # 2. Install
 cp -r divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
@@ -126,14 +126,14 @@ Arrows mean "depends on". Everything at the same vertical level runs simultaneou
 #### Option 1: Copy (simple)
 
 ```bash
-git clone https://github.com/RuneweaverStudios/divideandconquer.git
+git clone https://github.com/austindixson/divideandconquer.git
 cp -r divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
 ```
 
 #### Option 2: Symlink (auto-updates with `git pull`)
 
 ```bash
-git clone https://github.com/RuneweaverStudios/divideandconquer.git ~/tools/divideandconquer
+git clone https://github.com/austindixson/divideandconquer.git ~/tools/divideandconquer
 ln -s ~/tools/divideandconquer/claude-code-skill ~/.claude/skills/divideandconquer
 ```
 
@@ -144,7 +144,7 @@ Start a new Claude Code session and type `/divideandconquer`. If the skill appea
 ### OpenClaw Skill
 
 ```bash
-git clone https://github.com/RuneweaverStudios/divideandconquer.git
+git clone https://github.com/austindixson/divideandconquer.git
 cp -r divideandconquer/openclaw-skill/divideandconquer /path/to/your/openclaw/skills/
 ```
 

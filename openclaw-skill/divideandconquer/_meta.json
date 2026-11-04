@@ -5,7 +5,7 @@
   "displayName": "Divide and Conquer",
   "description": "Task decomposition and parallel execution engine. Analyzes any complex task, breaks it into atomic subtasks, builds a dependency graph (DAG), groups independent work into parallel execution waves, and dispatches agents concurrently for maximum throughput. Handles feature builds, bug investigations, refactors, research synthesis, migrations, and greenfield projects. Includes heuristics for challenging false dependencies, worktree isolation for file conflicts, and honest assessment of serial vs parallel tradeoffs.",
   "slogan": "Serial is the enemy. Parallel is the default.",
-  "author": "RuneweaverStudios",
+  "author": "austindixson",
   "tags": [
     "parallel",
     "concurrency",
